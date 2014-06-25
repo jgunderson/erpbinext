@@ -1,6 +1,11 @@
+-- Drop and Re-Create Schema
+   
+   DROP schema IF exists ERPI;
+   CREATE SCHEMA ERPI;
+   
 -- Common Dimension
 
---CREATE TABLES / VIEW FOR DATE DIMENSION
+-- CREATE TABLES / VIEW FOR DATE DIMENSION
 
 DROP VIEW IF EXISTS ERPI.`FISCAL_PERIODS_CL`;
 DROP VIEW IF EXISTS ERPI.`DATE_DATA_CL`;
@@ -8,6 +13,8 @@ DROP TABLE IF EXISTS ERPI.`DATE_DATA` CASCADE;
 DROP TABLE IF EXISTS ERPI.`DATE_DATA_EXTRACT` CASCADE;
 DROP TABLE IF EXISTS ERPI.`FISCAL_PERIODS` CASCADE; 
 DROP TABLE IF EXISTS ERPI.`TEMP_FISCAL_PERIODS` CASCADE;
+
+DROP TABLE IF EXISTS ERPI.`DATE_DATA`;
 
 CREATE TABLE ERPI.`DATE_DATA`
 (
@@ -21,11 +28,15 @@ CREATE TABLE ERPI.`DATE_DATA`
     `DAY` 			SMALLINT
 );
 
+DROP TABLE IF EXISTS ERPI.`DATE_DATA_EXTRACT`;
+
 CREATE TABLE ERPI.`DATE_DATA_EXTRACT` 
 (
     DATA_MART 	VARCHAR(2) NOT NULL,
     THE_DATE 		DATE
 );
+
+DROP TABLE IF EXISTS ERPI.`FISCAL_PERIODS`;
 
 CREATE TABLE ERPI.`FISCAL_PERIODS`
 (
@@ -95,6 +106,8 @@ SELECT
   WHERE `FISCAL_VARIANT` = 'CL' OR
                `FISCAL_PERIOD_K` = 0;
 
+DROP TABLE IF EXISTS ERPI.`TEMP_FISCAL_PERIODS`;
+
 CREATE TABLE `ERPI`.`TEMP_FISCAL_PERIODS` 
 (
     `FISCAL_PERIOD_K`		INTEGER NOT NULL,
@@ -110,8 +123,8 @@ CREATE TABLE `ERPI`.`TEMP_FISCAL_PERIODS`
     `VERSION`				INTEGER
 );
 
------------------------------------------------------------------------------------------------------------------------------
---DROP INDEX IF EXISTS `THE_DATE_INDEX`;
+-- ---------------------------------------------------------------------------------------------------------------------------
+DROP INDEX IF EXISTS `THE_DATE_INDEX`;
 
 CREATE INDEX `THE_DATE_INDEX`
    ON ERPI.`DATE_DATA` 
@@ -120,8 +133,8 @@ CREATE INDEX `THE_DATE_INDEX`
 	`THE_DATE`
 );
 
------------------------------------------------------------------------------------------------------------------------------
---DROP TABLE IF EXISTS ERPI.`GEO_CITIES_DATA` CASCADE ;
+-- ---------------------------------------------------------------------------------------------------------------------------
+DROP TABLE IF EXISTS ERPI.`GEO_CITIES_DATA` CASCADE ;
 
 CREATE TABLE ERPI.`GEO_CITIES_DATA` 
 (
@@ -152,20 +165,20 @@ CREATE INDEX `GEO_CITIES_DATA_NK_INDEX`
 		`CITY_NAME`
   );
 
------------------------------------------------------------------------------------------------------------------------------
+-- ---------------------------------------------------------------------------------------------------------------------------
 -- We create the index in the schema definition, not here.  This is because the dimension
 -- lookup/update step reads the dimension before inserting a record.  Use this on
 -- all dimensions?
 --
---CREATE INDEX `GEO_CITIES_DATA_NK_INDEX`
+-- CREATE INDEX `GEO_CITIES_DATA_NK_INDEX`
 --   ON ERPI.`GEO_CITIES_DATA`
 --   (
 --		`COUNTRY_NAME`,
 --      	`REGION_CODE`,
 --      	`CITY_ACCENT_NAME`
---  );
+--   );
 
------------------------------------------------------------------------------------------------------------------------------
+-- ---------------------------------------------------------------------------------------------------------------------------
 -- CREATE LOCAL DIMENSIONS --
 DROP VIEW IF EXISTS ERPI.`ACCOUNT_REP`;	
 DROP VIEW IF EXISTS ERPI.`DIVISION`;
@@ -178,6 +191,8 @@ DROP TABLE IF EXISTS ERPI.`PERSON` CASCADE;
 DROP TABLE IF EXISTS ERPI.`COMPANY` CASCADE;
 DROP TABLE IF EXISTS ERPI.`LOCAL_CURRENCY` CASCADE;
 DROP TABLE IF EXISTS ERPI.`DIVISION_TYPE` CASCADE;
+
+DROP TABLE IF EXISTS ERPI.`CUSTOMER`;
 
 CREATE TABLE ERPI.`CUSTOMER` 
 (
@@ -203,6 +218,7 @@ CREATE INDEX `CUSTOMER_NK_INDEX`
 	`CUSTOMER_NK`
    );
 
+DROP TABLE IF EXISTS ERPI.`PRODUCT`;
 
 CREATE TABLE ERPI.`PRODUCT` 
 (
@@ -229,6 +245,8 @@ CREATE INDEX `PRODUCT_NK_INDEX`
 	`PRODUCT_NK`
    );
 
+DROP TABLE IF EXISTS ERPI.`BUSINESS_UNIT`;
+
 CREATE TABLE ERPI.`BUSINESS_UNIT`
 (
     `BUSINESS_UNIT_K` 	INTEGER NOT NULL,
@@ -251,6 +269,7 @@ CREATE INDEX `BUSINESS_UNIT_NK_INDEX`
       `BUSINESS_UNIT_NK` 
    );
 
+DROP TABLE IF EXISTS ERPI.`PROFIT_CENTER`;
 
 CREATE TABLE ERPI.`PROFIT_CENTER`
 (
@@ -274,12 +293,14 @@ CREATE INDEX `PROFIT_CENTER_NK_INDEX`
 	`PROFIT_CENTER_NK`
    );
 
+DROP TABLE IF EXISTS ERPI.`PERSON`;
+
 CREATE TABLE ERPI.`PERSON` 
 (
     `PERSON_K` 	INTEGER NOT NULL,
     `PERSON_NK` VARCHAR(128) NOT NULL DEFAULT 'Unspecified',
-    `ROLE` 		VARCHAR(128) NOT NULL DEFAULT '-',
-    `NAME` 		VARCHAR(256) NOT NULL DEFAULT '-',
+    `ROLE`      VARCHAR(128) NOT NULL DEFAULT '-',
+    `NAME`      VARCHAR(256) NOT NULL DEFAULT '-',
     `DATE_FROM` TIMESTAMP,
     `DATE_TO` 	TIMESTAMP,
     `VERSION` 	INTEGER
@@ -308,6 +329,8 @@ AS
 SELECT `PERSON_K`, `PERSON_NK`, `NAME` FROM ERPI.`PERSON` WHERE `ROLE` = 'ACCOUNT_REP' OR `PERSON_K`=0;
 
 
+DROP TABLE IF EXISTS ERPI.`COMPANY`;
+
 CREATE TABLE ERPI.`COMPANY` 
 (
     `COMPANY_K` 	INTEGER NOT NULL,
@@ -331,6 +354,8 @@ CREATE INDEX `COMPANY_NK_INDEX`
     `COMPANY_NK`
    );
 
+DROP TABLE IF EXISTS ERPI.`LOCAL_CURRENCY`;
+
 CREATE TABLE ERPI.`LOCAL_CURRENCY` 
 (
     `LOCAL_CURRENCY_K` 	INTEGER NOT NULL,
@@ -352,6 +377,8 @@ CREATE INDEX `LOCAL_CURRENCY_NK_INDEX`
    (
     `LOCAL_CURRENCY_NK`
    );
+
+DROP TABLE IF EXISTS ERPI.`DIVISION_TYPE`;
 
 CREATE TABLE ERPI.`DIVISION_TYPE`
 (
@@ -391,9 +418,9 @@ CREATE VIEW ERPI.`DIVISION`
 AS 
 SELECT `DIVISION_K`, `DIVISION_CODE`, `DIVISION_NAME`, `DATE_FROM`, `DATE_TO`, `VERSION` FROM ERPI.`DIVISION_TYPE` WHERE `DIVISION_TYPE` = 'DIVISION' OR `DIVISION_K` = 0;
 
-------------------------------------------------------------------------------------------
------------------------------------------------------------------------------------------------------------------------------
---DROP & CREATE SO Tables & Views
+-- ----------------------------------------------------------------------------------------
+-- ---------------------------------------------------------------------------------------------------------------------------
+-- DROP & CREATE SO Tables & Views
 DROP TABLE IF EXISTS ERPI.`SALES_ORDER_FACTS` CASCADE;
 DROP TABLE IF EXISTS ERPI.`AGG_NOITEM_SALES_ORDER_FACTS` CASCADE;
 DROP TABLE IF EXISTS ERPI.`AGG_NOCUST_SALES_ORDER_FACTS` CASCADE;
@@ -835,7 +862,7 @@ ALTER TABLE ERPI.`SO_FACTS_BY_PERIOD`
 ADD CONSTRAINT `SO_BY_PERIOD_SHIP_CITY_FK` FOREIGN KEY (`SHIP_CITY_K`)
     REFERENCES ERPI.`GEO_CITIES_DATA`(`GEO_DATA_K`);
 
------------------------------------------------------------------------------------------------------------------------------
+-- ---------------------------------------------------------------------------------------------------------------------------
 -- CREATE SO Fact Indexes
 --
 -- SALES_ORDER_FACTS foreign key indexes and natural keys indexes
@@ -1109,7 +1136,7 @@ CREATE INDEX `SO_FACTS_BY_PERIOD_SHIP_CITY_K`
       `SHIP_CITY_K`
    );
 
------------------------------------------------------------------------------------------------------------------------------
+-- ---------------------------------------------------------------------------------------------------------------------------
 -- Drop and Create GL Tables & Views
 DROP TABLE IF EXISTS ERPI.`GL_ACCOUNT` CASCADE ;
 DROP TABLE IF EXISTS ERPI.`GL_BUDGET` CASCADE;

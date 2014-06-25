@@ -1,4 +1,4 @@
---1=================================================================================1--
+-- 1=================================================================================1--
 --                            EXTRACT SQL FOR DATE DIMENSION                         --
 
 CREATE OR REPLACE VIEW ERPI.FISCAL_PERIODS_DS_1 AS
@@ -33,7 +33,7 @@ WHERE v.selected_date BETWEEN fy.year_start_date AND fy.year_end_date
 ORDER BY 1, 2, 3, 4, 5, 6, 7;
 
 
--------------------------------------------
+-- -----------------------------------------
 INSERT INTO ERPI.FISCAL_PERIODS
 select @ROWNUM := @ROWNUM + 1 AS FISCAL_PERIOD_K, 
        'CL' as FISCAL_VARIANT,
@@ -50,10 +50,10 @@ select @ROWNUM := @ROWNUM + 1 AS FISCAL_PERIOD_K,
 from ERPI.FISCAL_PERIODS_DS ds, (SELECT @ROWNUM := 0) row
 WHERE ds.modified >= '1901-01-01';
 
--------------------------------------------
---1=================================================================================1--
+-- -----------------------------------------
+-- 1=================================================================================1--
 
---2===============================================================================2--
+-- 2===============================================================================2--
 --                        EXTRACT SQL FOR CUSTOMER DIMENSION                       --
 
 CREATE OR REPLACE VIEW ERPI.CUSTOMER_DS AS 
@@ -63,9 +63,9 @@ SELECT trim(name) as "customer_nk",
        credit_limit as "credit_limit",
        creation as "creation",
        modified as "modified"
-FROM erpnext.`tabCustomer` ;
+FROM erpnext.`tabCustomer`;
 
--------------------------------------------
+-- -----------------------------------------
 INSERT INTO ERPI.CUSTOMER
 select @ROWNUM := @ROWNUM + 1 AS CUSTOMER_K, 
        CUSTOMER_NK,
@@ -77,28 +77,35 @@ select @ROWNUM := @ROWNUM + 1 AS CUSTOMER_K,
        1 AS VERSION
 from ERPI.CUSTOMER_DS ds, (SELECT @ROWNUM := 0) row
 WHERE ds.modified >= '1901-01-01';
--------------------------------------------
---2===============================================================================2--
+
+-- -----------------------------------------
+-- 2===============================================================================2--
 
 
---3===============================================================================3--
+-- 3===============================================================================3--
 --                        EXTRACT SQL FOR SALES REP DIMENSION                      --
 
 CREATE OR REPLACE VIEW ERPI.PERSON_DS AS
 SELECT trim(name) as "person_nk",
        trim(sales_person_name) as "name",
-       'SALES_REP' as "role",
+       'ACCOUNT_REP' as "role",
        creation as "creation",
        modified as "modified"
 FROM erpnext.`tabSales Person`
 union 
 SELECT trim(name) as "person_nk",
        trim(partner_name) as "name",
-       'SALES_PARTNER' as "role",
+       'ACCOUNT_REP' as "role",
        creation as "creation",
        modified as "modified"
-FROM erpnext.`tabSales Partner`;
--------------------------------------------
+FROM erpnext.`tabSales Partner`
+;
+
+-- -----------------------------------------
+SET FOREIGN_KEY_CHECKS=0;
+TRUNCATE ERPI.PERSON;
+SET FOREIGN_KEY_CHECKS=1;
+
 INSERT INTO ERPI.PERSON
 select @ROWNUM := @ROWNUM + 1 AS PERSON_K, 
        PERSON_NK,
@@ -108,11 +115,20 @@ select @ROWNUM := @ROWNUM + 1 AS PERSON_K,
        TIMESTAMP('2037-12-31 23:59:59') AS DATE_TOE,
        1 AS VERSION
 from ERPI.PERSON_DS ds, (SELECT @ROWNUM := 0) row
-WHERE ds.modified >= '1901-01-01';
--------------------------------------------
---3===============================================================================3--
+WHERE ds.modified >= '1901-01-01'
+UNION
+select 0 AS PERSON_K, 
+       '0' PERSON_NK,
+       'ACCOUNT_REP' ROLE,
+       'Unspecified' NAME,
+       TIMESTAMP('1971-01-01 00:00:01') AS DATE_FROM,
+       TIMESTAMP('2037-12-31 23:59:59') AS DATE_TOE,
+       1 AS VERSION
+;
+-- -----------------------------------------
+-- 3===============================================================================3--
 
---4===============================================================================4--
+-- 4===============================================================================4--
 --                         EXTRACT SQL FOR PRODUCT DIMENSION                       --
 
 CREATE OR REPLACE VIEW ERPI.PRODUCT_DS AS 
@@ -131,9 +147,10 @@ SELECT trim(item_code) as"product_nk",
        creation as "creation",
        modified as "modified"
 FROM erpnext.`tabItem`
-ORDER BY item_code;
+ORDER BY item_code
+;
 
--------------------------------------------
+-- -----------------------------------------
 INSERT INTO ERPI.PRODUCT
 select @ROWNUM := @ROWNUM + 1 AS PRODUCT_K, 
        PRODUCT_NK,
@@ -145,13 +162,23 @@ select @ROWNUM := @ROWNUM + 1 AS PRODUCT_K,
        TIMESTAMP('2037-12-31 23:59:59') AS DATE_TOE,
        1 AS VERSION
 from ERPI.PRODUCT_DS ds, (SELECT @ROWNUM := 0) row
-WHERE ds.modified >= '1901-01-01';
+WHERE ds.modified >= '1901-01-01'
+UNION
+select 0 AS PRODUCT_K,
+       '0' AS PRODUCT_NK,
+       'Unspecified' AS PRODUCT_NAME,
+       'Unspecified' AS CATEGORY,
+       'UNSPCD' AS TYPE,
+       'UNSPCD' AS CLASS,
+       TIMESTAMP('1971-01-01 00:00:01') AS DATE_FROM,
+       TIMESTAMP('2037-12-31 23:59:59') AS DATE_TOE,
+       1 AS VERSION;
 
--------------------------------------------
+-- -----------------------------------------
 
---4===============================================================================4--
+-- 4===============================================================================4--
 
---5===============================================================================5--
+-- 5===============================================================================5--
 --                         EXTRACT SQL FOR COMPANY DIMENSION                       --
 
 CREATE OR REPLACE VIEW ERPI.COMPANY_DS AS 
@@ -162,7 +189,7 @@ SELECT CASE WHEN trim(name) = '' THEN 'Unspecified' ELSE COALESCE(trim(name), 'U
        modified as "modified"
 FROM erpnext.`tabCompany`;
 
--------------------------------------------
+-- -----------------------------------------
 INSERT INTO ERPI.COMPANY
 select @ROWNUM := @ROWNUM + 1 AS COMPANY_K, 
        COMPANY_NK,
@@ -172,13 +199,21 @@ select @ROWNUM := @ROWNUM + 1 AS COMPANY_K,
        TIMESTAMP('2037-12-31 23:59:59') AS DATE_TOE,
        1 AS VERSION
 from ERPI.COMPANY_DS ds, (SELECT @ROWNUM := 0) row
-WHERE ds.modified >= '1901-01-01';
+WHERE ds.modified >= '1901-01-01'
+UNION 
+select 0 AS COMPANY_K, 
+       '0' AS COMPANY_NK,
+       'Unspecified' COMPANY_NAME,
+       'N' COMPANY_EXTERNAL,
+       TIMESTAMP('1971-01-01 00:00:01') AS DATE_FROM,
+       TIMESTAMP('2037-12-31 23:59:59') AS DATE_TOE,
+       1 AS VERSION;
 
--------------------------------------------
+-- -----------------------------------------
 
---5===============================================================================5--
+-- 5===============================================================================5--
 
---6===============================================================================6--
+-- 6===============================================================================6--
 --                        EXTRACT SQL FOR CURRENCY DIMENSION                       --
 
 CREATE OR REPLACE VIEW ERPI.CURRENCY_DS AS 
@@ -192,7 +227,7 @@ FROM erpnext.`tabCurrency` cur
 ORDER BY 1;
 
 
--------------------------------------------
+-- -----------------------------------------
 INSERT INTO ERPI.LOCAL_CURRENCY
 select @ROWNUM := @ROWNUM + 1 AS LOCAL_CURRENCY_K, 
        LOCAL_CURRENCY_NK,
@@ -203,11 +238,11 @@ select @ROWNUM := @ROWNUM + 1 AS LOCAL_CURRENCY_K,
 from ERPI.CURRENCY_DS ds, (SELECT @ROWNUM := 0) row
 WHERE ds.modified >= '1901-01-01';
 
--------------------------------------------
+-- -----------------------------------------
 
---6===============================================================================6--
+-- 6===============================================================================6--
 
---7===============================================================================7--
+-- 7===============================================================================7--
 --                  EXTRACT SQL FOR COST/PROFIT CENTER DIMENSION                   --
 CREATE OR REPLACE VIEW ERPI.PROFIT_CENTER_DS AS 
 SELECT trim(name) as profit_center_nk,
@@ -217,7 +252,7 @@ SELECT trim(name) as profit_center_nk,
 FROM erpnext.`tabCost Center`
 ORDER BY 1;
 
--------------------------------------------
+-- -----------------------------------------
 INSERT INTO ERPI.PROFIT_CENTER
 select @ROWNUM := @ROWNUM + 1 AS PROFIT_CENTER_K, 
        PROFIT_CENTER_NK,
@@ -226,22 +261,34 @@ select @ROWNUM := @ROWNUM + 1 AS PROFIT_CENTER_K,
        TIMESTAMP('2037-12-31 23:59:59') AS DATE_TOE,
        1 AS VERSION
 from ERPI.PROFIT_CENTER_DS ds, (SELECT @ROWNUM := 0) row
-WHERE ds.modified >= '1901-01-01';
+WHERE ds.modified >= '1901-01-01'
+union 
+select 0 AS PROFIT_CENTER_K, 
+       '0' PROFIT_CENTER_NK,
+       'Unspecified' NAME,
+       TIMESTAMP('1971-01-01 00:00:01') AS DATE_FROM,
+       TIMESTAMP('2037-12-31 23:59:59') AS DATE_TOE,
+       1 AS VERSION
+;
 
--------------------------------------------
+-- -----------------------------------------
 
---7===============================================================================7--
+-- 7===============================================================================7--
 
---8===============================================================================8--
+-- 8===============================================================================8--
 --                 EXTRACT SQL FOR BUSINESS UNIT CENTER DIMENSION                  --
 
 CREATE OR REPLACE VIEW ERPI.BUSINESS_UNIT_DS AS 
-SELECT 0001 as business_unit_nk,
-       'Sample Business Unit' as business_unit,
+SELECT '0001' as business_unit_nk,
+       'Default Business Unit' as business_unit,
        TIMESTAMP('1901-01-01 00:00:00') as creation,
        TIMESTAMP('1901-01-01 00:00:00') as modified;
 
--------------------------------------------
+-- -----------------------------------------
+
+SET FOREIGN_KEY_CHECKS=0;
+TRUNCATE ERPI.BUSINESS_UNIT;
+SET FOREIGN_KEY_CHECKS=1;
 
 INSERT INTO ERPI.BUSINESS_UNIT
 select @ROWNUM := @ROWNUM + 1 AS BUSINESS_UNIT_K, 
@@ -251,23 +298,34 @@ select @ROWNUM := @ROWNUM + 1 AS BUSINESS_UNIT_K,
        TIMESTAMP('2037-12-31 23:59:59') AS DATE_TOE,
        1 AS VERSION
 from ERPI.BUSINESS_UNIT_DS ds, (SELECT @ROWNUM := 0) row
-WHERE ds.modified >= '1900-01-01';
+WHERE ds.modified >= '1900-01-01'
+UNION
+select 0 AS BUSINESS_UNIT_K, 
+       '0' BUSINESS_UNIT_NK,
+       'Unspecified' BUSINESS_UNIT,
+       TIMESTAMP('1971-01-01 00:00:01') AS DATE_FROM,
+       TIMESTAMP('2037-12-31 23:59:59') AS DATE_TOE,
+       1 AS VERSION
+;
 
--------------------------------------------
+-- -----------------------------------------
 
---8===============================================================================8--
+-- 8===============================================================================8--
 
---9===============================================================================9--
+-- 9===============================================================================9--
 --                    EXTRACT SQL FOR DIVISION CENTER DIMENSION                    --
 
 CREATE OR REPLACE VIEW ERPI.DIVISION_DS AS 
-SELECT 0001 as DIVISION_NK,
-       'Sample Division' as DIVISION,
+SELECT '0001' as DIVISION_NK,
+       'Default Division' as DIVISION,
        'Division' as DIVISION_TYPE,
        TIMESTAMP('1901-01-01 00:00:00') as creation,
        TIMESTAMP('1901-01-01 00:00:00') as modified;
 
--------------------------------------------
+-- -----------------------------------------
+SET FOREIGN_KEY_CHECKS=0;
+TRUNCATE ERPI.DIVISION_TYPE;
+SET FOREIGN_KEY_CHECKS=1;
 
 INSERT INTO ERPI.DIVISION_TYPE
 select @ROWNUM := @ROWNUM + 1 AS DIVISION_K, 
@@ -278,27 +336,36 @@ select @ROWNUM := @ROWNUM + 1 AS DIVISION_K,
        TIMESTAMP('2037-12-31 23:59:59') AS DATE_TOE,
        1 AS VERSION
 from ERPI.DIVISION_DS ds, (SELECT @ROWNUM := 0) row
-WHERE ds.modified >= '1900-01-01';
+WHERE ds.modified >= '1900-01-01'
+UNION
+select 0 AS DIVISION_K, 
+       'UNSP' as DIVISION_TYPE,
+       '0' AS DIVISION_CODE,
+       'Unspecified' AS DIVISION_NAME,
+       TIMESTAMP('1971-01-01 00:00:01') AS DATE_FROM,
+       TIMESTAMP('2037-12-31 23:59:59') AS DATE_TOE,
+       1 AS VERSION
+;
 
--------------------------------------------
+-- -----------------------------------------
 
---9===============================================================================9--
+-- 9===============================================================================9--
 
 
---10===============================================================================10--
+-- 10===============================================================================10--
 --                    EXTRACT SQL FOR POPULATE THE SO FACTS                          --
----- IN PROGRESS
+-- -- IN PROGRESS
 CREATE OR REPLACE VIEW ERPI.SALES_ORDER_FS
 AS 
 select 
     CASE WHEN trim(so.name) = '' THEN 'Unspecified'
-	ELSE COALESCE(trim(so.name), 'Unspecified') END         as "ID_Document_NK",
-	CASE WHEN trim(so.name) = '' THEN 'Unspecified'
-		ELSE COALESCE(trim(so.name), 'Unspecified') END     as "ID_Trans_Doc_NK",
-	concat(concat(CASE WHEN trim(so.name) = '' THEN 'Unspecified' 
-		ELSE COALESCE(trim(so.name), 'Unspecified') END, '-'),
-	trim(so_item.name))                                     as "Line_NK",
- 	DATE_FORMAT(so.transaction_date,'%m/%d/%Y')             as "Issue_Date",
+	ELSE COALESCE(trim(so.name), 'Unspecified') END            as "ID_Document_NK",
+    CASE WHEN trim(so.name) = '' THEN 'Unspecified'
+        ELSE COALESCE(trim(so.name), 'Unspecified') END            as "ID_Trans_Doc_NK",
+    concat(concat(CASE WHEN trim(so.name) = '' THEN 'Unspecified' 
+        ELSE COALESCE(trim(so.name), 'Unspecified') END, '-'),
+    trim(so_item.name))                                            as "Line_NK",
+    DATE_FORMAT(so.transaction_date,'%m/%d/%Y')                    as "Issue_Date",
 --
 --  We can't allow null or nonsense promose dates.  
 --  An no earlier dates as they may not exist in the dates dimension
@@ -308,48 +375,48 @@ select
             WHEN so.delivery_date < so.transaction_date THEN DATE_FORMAT(so.transaction_date,'%m/%d/%Y')
             WHEN DATE_FORMAT(so.delivery_date,'%m/%d/%Y') = '01/01/2100' THEN DATE_FORMAT(so.transaction_date,'%m/%d/%Y')
             ELSE DATE_FORMAT(so.delivery_date,'%m/%d/%Y')
-    END 													as "Promise_Date",
+    END 						           as "Promise_Date",
 
-	round(so_item.base_price_list_rate,2)  					as so_baseunitprice,
-	round(so_item.base_amount, 2) 	                        as "Amount",
-	round(so_item.amount, 2) 	                            as "Amount_Local",
-	round(so_item.qty * so_item.base_price_list_rate, 2) 	as "Amount_List",
-	round(so_item.qty * so_item.price_list_rate, 2) 	    as "Amount_List_Local",
- 	so_item.qty												as "Quantity_Order",					    
--- 	COALESCE(coitem_unitcost, 0)							as "Cost",
- 	0														as "Cost",
-	COALESCE(so.customer, 'Unspecified')					as "Customer",
-	COALESCE(so.company, 'Unspecified')	                    as "Company",
-	COALESCE(so_item.item_code, 'Unspecified')				as "Item",
-	COALESCE(so.price_list_currency, 'Unspecified')	    	as "Local_Currency",
-	'Unspecified' 										    as "Division",
-	'Unspecified' 											as "Business_Unit",
-	COALESCE(so.sales_partner, 'Unspecified')       		as "Account_Rep",
-	'Unspecified' 											as "Profit_Center",
-	CASE WHEN addr.city = '' THEN 'Unspecified'
-		ELSE COALESCE(upper(addr.city), 'Unspecified') 
-	END														as "Ship_City",
-	CASE WHEN addr.state = '' THEN 'Unspecified'
-		ELSE COALESCE(upper(addr.state), 'Unspecified') 
-	END														as "Ship_Region",
-	CASE WHEN addr.country = '' THEN 'Unspecified'
-		ELSE COALESCE(upper(addr.country), 'Unspecified') 
-	END														as "Ship_Country",
-	CASE WHEN addr.city = '' THEN 'Unspecified'
-		ELSE COALESCE(upper(addr.city), 'Unspecified') 
-	END														as "Bill_City",
-	CASE WHEN addr.state = '' THEN 'Unspecified'
-		ELSE COALESCE(upper(addr.state), 'Unspecified') 
-	END														as "Bill_Region",
-	CASE WHEN addr.country = '' THEN 'Unspecified'
-		ELSE COALESCE(upper(addr.country), 'Unspecified') 
-	END														as "Bill_Country",
+    round(so_item.base_price_list_rate,2)  			   as so_baseunitprice,
+    round(so_item.base_amount, 2) 	                           as "Amount",
+    round(so_item.amount, 2) 	                                   as "Amount_Local",
+    round(so_item.qty * so_item.base_price_list_rate, 2)           as "Amount_List",
+    round(so_item.qty * so_item.price_list_rate, 2) 	           as "Amount_List_Local",
+    so_item.qty						           as "Quantity_Order",					    
+-- 	COALESCE(coitem_unitcost, 0)				   as "Cost",
+    0								   as "Cost",
+    COALESCE(so.customer, '0')					   as "Customer",
+    COALESCE(so.company, '0')	                                   as "Company",
+    COALESCE(so_item.item_code, '0')			           as "Item",
+    COALESCE(so.price_list_currency, '0')	    	           as "Local_Currency",
+    '1' 							   as "Division",
+    '1'         						   as "Business_Unit",
+    COALESCE(so.sales_partner, '0')       	                   as "Account_Rep",
+    '0' 					                   as "Profit_Center",
+    CASE WHEN addr.city = '' THEN '0'
+         ELSE COALESCE(upper(addr.city), '0') 
+    END								   as "Ship_City",
+    CASE WHEN addr.state = '' THEN '0'
+         ELSE COALESCE(upper(addr.state), '0') 
+    END								   as "Ship_Region",
+    CASE WHEN addr.country = '' THEN '0'
+         ELSE COALESCE(upper(addr.country), '0') 
+    END								   as "Ship_Country",
+    CASE WHEN addr.city = '' THEN '0'
+         ELSE COALESCE(upper(addr.city), '0') 
+    END								   as "Bill_City",
+    CASE WHEN addr.state = '' THEN '0'
+         ELSE COALESCE(upper(addr.state), '0') 
+    END								   as "Bill_Region",
+    CASE WHEN addr.country = '' THEN '0'
+         ELSE COALESCE(upper(addr.country), '0') 
+    END								   as "Bill_Country",
     case when so.creation > so_item.creation then so.creation
          else so_item.creation
-    end                                                     as "creation", 
-	case when so.modified > so_item.modified then so.modified
+    end                                                            as "creation", 
+    case when so.modified > so_item.modified then so.modified
          else so_item.modified
-    end                                                     as "modified"
+    end                                                            as "modified"
 from erpnext.`tabSales Order` so 
      left outer join erpnext.`tabSales Person` pers on so.sales_partner = pers.name
 	 left outer join erpnext.`tabAddress` addr on addr.name = so.customer_address
@@ -359,4 +426,107 @@ from erpnext.`tabSales Order` so
      inner join erpnext.`tabItem` itm on itm.item_code = so_item.item_code
 where  1=1 
  ;
---9===============================================================================9--
+ 
+ 
+-- --------------------------------------------------------
+
+INSERT INTO ERPI.SALES_ORDER_FACTS
+SELECT 
+FS.ID_Document_NK,
+FS.ID_Trans_Doc_NK,
+FS.Line_NK,
+coalesce(IDT.DAYS_DATE,0) as ISSUE_DATE_K,
+coalesce(PDT.DAYS_DATE,0) as PROMISE_DATE_K,
+FS.AMOUNT,
+FS.AMOUNT_LOCAL,
+FS.AMOUNT_LIST,
+FS.AMOUNT_LIST_LOCAL,
+FS.QUANTITY_ORDER,
+FS.COST,
+coalesce(CO.COMPANY_K, 0) as COMPANY_K,
+coalesce(CUS.CUSTOMER_K, 0) as CUSTOMER_K,
+coalesce(PR.PRODUCT_K, 0) as ITEM_K,          -- ITEM
+coalesce(DI.DIVISION_K, 0) as DIVISION_K,      -- DIVISION
+coalesce(BU.BUSINESS_UNIT_K, 0) as BUSINESS_UNIT_K, -- BUSINESS_UNIT
+coalesce(PC.PROFIT_CENTER_K, 0) as PROFIT_CENTER_K, -- PROFIT_CENTER
+coalesce(AR.ACCOUNT_REP_K, 0) as ACCOUNT_REP_K,   -- ACCOUNT_REP
+coalesce(BC.GEO_DATA_K, 0) AS BILL_CITY_K,     -- BILL_CITY
+coalesce(SC.GEO_DATA_K, 0) AS SHIP_CITY_K,     -- SHIP_CITY
+coalesce(LC.LOCAL_CURRENCY_K, 0) as LOCAL_CURRENCY_K -- LOCAL_CURRENCY
+FROM ERPI.SALES_ORDER_FS FS
+     LEFT OUTER JOIN ERPI.DATE_DATA_CL IDT on IDT.THE_DATE = STR_TO_DATE(FS.ISSUE_DATE,'%m/%d/%Y')
+     LEFT OUTER JOIN ERPI.DATE_DATA_CL PDT on PDT.THE_DATE = STR_TO_DATE(FS.PROMISE_DATE,'%m/%d/%Y')
+     LEFT OUTER JOIN ERPI.COMPANY CO ON CO.COMPANY_NK = FS.COMPANY
+     LEFT OUTER JOIN ERPI.CUSTOMER CUS ON CUS.CUSTOMER_NK = FS.CUSTOMER
+     LEFT OUTER JOIN ERPI.PRODUCT PR on PR.PRODUCT_NK = FS.ITEM
+     LEFT OUTER JOIN ERPI.DIVISION DI on DI.DIVISION_CODE = FS.DIVISION
+     LEFT OUTER JOIN ERPI.BUSINESS_UNIT BU on BU.BUSINESS_UNIT_NK = FS.BUSINESS_UNIT
+     LEFT OUTER JOIN ERPI.PROFIT_CENTER PC on PC.PROFIT_CENTER_NK = FS.PROFIT_CENTER
+     LEFT OUTER JOIN ERPI.ACCOUNT_REP AR on AR.ACCOUNT_REP_NO = FS.ACCOUNT_REP
+     LEFT OUTER JOIN ERPI.GEO_CITIES_DATA BC on BC.CITY_NAME = FS.BILL_CITY
+     LEFT OUTER JOIN ERPI.GEO_CITIES_DATA SC on SC.CITY_NAME = FS.SHIP_CITY
+     LEFT OUTER JOIN ERPI.LOCAL_CURRENCY LC on LC.LOCAL_CURRENCY_NK = FS.LOCAL_CURRENCY
+WHERE FS.modified >= '1900-01-01';
+
+-- ---------------------------------------------------------
+-- 10===============================================================================10--
+
+-- 11===============================================================================11--
+--                       EXTRACT SQL FOR DIVISION CENTER DIMENSION                    --
+
+CREATE OR REPLACE VIEW ERPI.DATE_DATA_DS AS
+SELECT DISTINCT 'CL' DATE_PATTERN,
+       date_format(v.selected_date,'%Y%m%d') DAYS_DATE,
+       v.selected_date THE_DATE,
+       year(v.selected_date) YEAR,
+       quarter(v.selected_date) QUARTER,
+       month(v.selected_date) PERIOD,
+       week(v.selected_date) WEEK,
+       dayofyear(v.selected_date) DAY,
+       fy.creation as "creation",
+       fy.modified as "modified"
+FROM 
+ERPI.FISCAL_PERIODS_DS_2 v,
+erpnext.`tabFiscal Year` fy
+WHERE v.selected_date BETWEEN fy.year_start_date AND fy.year_end_date
+ORDER BY 1, 2, 3;
+
+-- -----------------------------------------
+
+INSERT INTO ERPI.DATE_DATA
+select DATE_PATTERN, 
+       DAYS_DATE,
+       THE_DATE,
+       YEAR,
+       QUARTER,
+       PERIOD,
+       WEEK,
+       DAY
+from ERPI.DATE_DATA_DS ds
+WHERE ds.modified >= '1900-01-01';
+
+-- -----------------------------------------
+
+-- 11===============================================================================11--
+
+-- 12===============================================================================12--
+--                       EXTRACT SQL FOR DIVISION CITIES DIMENSION                    --
+
+
+-- -----------------------------------------
+
+INSERT INTO ERPI.GEO_CITIES_DATA
+select 0 AS GEO_DATA_K, 
+       'NA' as COUNTRY_CODE,
+       'Unknown' AS COUNTRY_NAME,
+       'Unknown' AS REGION_CODE,
+       'Unspecified' AS CITY_NAME,
+       'Unspecified' AS CITY_ACCENT_NAME,
+       '0' AS LATTITUDE,
+       '0' AS LONGITUDE,
+       TIMESTAMP('1971-01-01 00:00:01') AS DATE_FROM,
+       TIMESTAMP('2037-12-31 23:59:59') AS DATE_TOE,
+       1 AS VERSION;
+-- -----------------------------------------
+
+-- 12===============================================================================12--
