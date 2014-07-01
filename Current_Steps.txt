@@ -824,3 +824,10 @@ WHERE
 
 -----------------------------------------------------------------------------------------------------------------------------
 =============================================================================================================================
+
+1) To get the Chart of a saved query use this url - http://localhost:8080/?mode=table&plugin=true#query/open/erpi.sales_by_customer.saiku.saiku
+2) Add the additional data source in the folder structure D:\saiku-server-2.6\tomcat\webapps\saiku\WEB-INF\classes\saiku-datasources
+3) Add the xml file of ERPI_SO_Schema.xml to D:\saiku-server-2.6\tomcat\webapps\saiku\WEB-INF\classes\erpi 
+4) Copy the file mdxudf from ErpBI\ErpBI\ErpBI\ETL\tools\lib to \saiku-server-2.6\tomcat\webapps\saiku\WEB-INF\lib
+5) Removed all the reference to the GL DataMarts from the ERPI_SO_Schema.xml file
+6) Modify the Server.xml file in D:\saiku-server-2.6\tomcat\conf to modify the port number.
