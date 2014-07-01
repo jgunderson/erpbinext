@@ -1,6 +1,69 @@
 -- 1=================================================================================1--
 --                            EXTRACT SQL FOR DATE DIMENSION                         --
 
+/*
+select
+	CASE WHEN cohead_number = '' THEN 'Unspecified'
+		ELSE COALESCE(cohead_number, 'Unspecified') END 						as "ID_Document_NK",	
+	shiphead_number			 									as "ID_Trans_Doc_NK",
+	(CASE WHEN cohead_number = '' THEN 'Unspecified'
+		ELSE COALESCE(shiphead_number, 'Unspecified') END) || '-' || shipitem_id			as "Line_NK",
+	to_char(shiphead_shipdate,'MM/DD/YYYY') 								as "Issue_Date",
+    CASE
+            WHEN coitem_promdate IS NULL THEN to_char(cohead_orderdate,'MM/DD/YYYY')::text
+            WHEN to_char(coitem_promdate,'MM/DD/YYYY') = '01/01/2100'::bpchar THEN to_char(cohead_orderdate,'MM/DD/YYYY')::text
+            ELSE to_char(coitem_promdate,'MM/DD/YYYY')::text
+    END 													as "Promise_Date",
+	currtobase(cohead_curr_id, coitem_price, cohead_orderdate) 						as so_baseunitprice,
+	round((coitem_qtyord * currtobase(cohead_curr_id, coitem_price, cohead_orderdate)), 2) 	                as so_baseextprice,  -- ext order amount
+	round((shipitem_qty * currtobase(cohead_curr_id, coitem_custprice, cohead_orderdate)), 2) 	        as "Amount_Local",
+	round((shipitem_qty * currtobase(cohead_curr_id, coitem_custprice, cohead_orderdate)), 2) 	        as "Amount",
+	round((shipitem_qty * currtobase(cohead_curr_id, coitem_price, cohead_orderdate)), 2) 	                as "Amount_List",
+	round((shipitem_qty * currtobase(cohead_curr_id, coitem_price, cohead_orderdate)), 2) 	                as "Amount_List_Local",
+	coitem_qtyord												as "Quantity_Order",	
+	round((shipitem_qty * currtobase(cohead_curr_id, coitem_unitcost, cohead_orderdate)), 2)                as "Cost",
+	cust_number 												as "Customer",
+	(SELECT company_number FROM company ORDER BY company_number DESC LIMIT 1)				as "Company",
+	CASE WHEN item_number = '' THEN 'Unspecified'
+		ELSE COALESCE(item_number, 'Unspecified') END 							as "Item",
+	(SELECT curr_abbr FROM curr_symbol WHERE curr_base = TRUE) 						as "Local_Currency",
+	'Unspecified' 												as "Division",
+	'Unspecified' 												as "Business_Unit",
+	salesrep_number 											as "Account_Rep",
+	'Unspecified' 												as "Profit_Center",
+	CASE WHEN cohead_shiptocity = '' THEN 'Unspecified'
+		ELSE COALESCE(upper(regexp_replace(cohead_shiptocity, E'\r|\n|;', '', 'g')), 'Unspecified') 
+		END												as "Ship_City",
+	CASE WHEN cohead_shiptostate = '' THEN 'Unspecified'
+		ELSE COALESCE(upper(regexp_replace(cohead_shiptostate, E'\r|\n|;', '', 'g')), 'Unspecified') 
+		END												as "Ship_Region",
+	CASE WHEN cohead_shiptocountry = '' THEN '${erpi.defaultcountry}'
+		ELSE COALESCE(upper(regexp_replace(cohead_shiptocountry, E'\r|\n|;', '', 'g')), '${erpi.defaultcountry}') 
+		END												as "Ship_Country",
+	CASE WHEN cohead_billtocity = '' THEN 'Unspecified'
+		ELSE COALESCE(upper(regexp_replace(cohead_billtocity, E'\r|\n|;', '', 'g')), 'Unspecified') 
+		END												as "Bill_City",
+	CASE WHEN cohead_billtostate = '' THEN 'Unspecified'
+		ELSE COALESCE(upper(regexp_replace(cohead_billtostate, E'\r|\n|;', '', 'g')), 'Unspecified') 
+		END							                                        as "Bill_Region",
+	CASE WHEN cohead_billtocountry = '' THEN '${erpi.defaultcountry}'
+		ELSE COALESCE(upper(regexp_replace(cohead_billtocountry, E'\r|\n|;', '', 'g')), '${erpi.defaultcountry}') 
+		END			as "Bill_Country"
+from coitem
+ join cohead on coitem_cohead_id=cohead_id									-- sales order 
+  join custinfo on cust_id=cohead_cust_id									-- customer 
+  join salesrep on salesrep_id=cohead_salesrep_id								-- sales rep
+  join itemsite on itemsite_id=coitem_itemsite_id								-- item inventory site
+  join whsinfo on warehous_id=itemsite_warehous_id								-- warehouse / site
+  join item on item_id=itemsite_item_id										-- item master
+  left outer join (
+    select shiphead_number, shipitem_qty, shipitem_id, shipitem_value, shiphead_shipdate, shiphead_order_type, shipitem_orderitem_id, shipitem_invcitem_id
+    from shiphead								-- shipment
+    join shipitem on shipitem_shiphead_id = shiphead_id  			-- shipment item  (NOT line item, more like a issue transaction!)
+  ) as ship on shiphead_order_type='SO' and shipitem_orderitem_id=coitem_id
+where shiphead_number != '' AND 
+	 (cohead_orderdate >= '${extractstartdate}' AND shiphead_shipdate >= '${extractstartdate}')
+*/
 CREATE OR REPLACE VIEW ERPI.FISCAL_PERIODS_DS_1 AS
 select 0 i union select 1 union select 2 union select 3 union select 4 union select 5 union select 6 union select 7 union select 8 union select 9;
 
@@ -348,13 +411,71 @@ select 0 AS DIVISION_K,
 ;
 
 -- -----------------------------------------
-
 -- 9===============================================================================9--
 
+-- 10===============================================================================10--
+--                       EXTRACT SQL FOR DIVISION CENTER DIMENSION                    --
+
+CREATE OR REPLACE VIEW ERPI.DATE_DATA_DS AS
+SELECT DISTINCT 'CL' DATE_PATTERN,
+       date_format(v.selected_date,'%Y%m%d') DAYS_DATE,
+       v.selected_date THE_DATE,
+       year(v.selected_date) YEAR,
+       quarter(v.selected_date) QUARTER,
+       month(v.selected_date) PERIOD,
+       week(v.selected_date) WEEK,
+       dayofyear(v.selected_date) DAY,
+       fy.creation as "creation",
+       fy.modified as "modified"
+FROM 
+ERPI.FISCAL_PERIODS_DS_2 v,
+erpnext.`tabFiscal Year` fy
+WHERE v.selected_date BETWEEN fy.year_start_date AND fy.year_end_date
+ORDER BY 1, 2, 3;
+
+-- -----------------------------------------
+
+INSERT INTO ERPI.DATE_DATA
+select DATE_PATTERN, 
+       DAYS_DATE,
+       THE_DATE,
+       YEAR,
+       QUARTER,
+       PERIOD,
+       WEEK,
+       DAY
+from ERPI.DATE_DATA_DS ds
+WHERE ds.modified >= '1900-01-01';
+
+-- -----------------------------------------
 
 -- 10===============================================================================10--
+
+-- 11===============================================================================11--
+--                       EXTRACT SQL FOR DIVISION CITIES DIMENSION                    --
+
+
+-- -----------------------------------------
+
+INSERT INTO ERPI.GEO_CITIES_DATA
+select 0 AS GEO_DATA_K, 
+       'NA' as COUNTRY_CODE,
+       'Unknown' AS COUNTRY_NAME,
+       'Unknown' AS REGION_CODE,
+       'Unspecified' AS CITY_NAME,
+       'Unspecified' AS CITY_ACCENT_NAME,
+       '0' AS LATTITUDE,
+       '0' AS LONGITUDE,
+       TIMESTAMP('1971-01-01 00:00:01') AS DATE_FROM,
+       TIMESTAMP('2037-12-31 23:59:59') AS DATE_TOE,
+       1 AS VERSION;
+-- -----------------------------------------
+
+-- 11===============================================================================11--
+
+-- 12===============================================================================12--
 --                    EXTRACT SQL FOR POPULATE THE SO FACTS                          --
--- -- IN PROGRESS
+-- 
 CREATE OR REPLACE VIEW ERPI.SALES_ORDER_FS
 AS 
 select 
@@ -469,64 +590,408 @@ FROM ERPI.SALES_ORDER_FS FS
 WHERE FS.modified >= '1900-01-01';
 
 -- ---------------------------------------------------------
--- 10===============================================================================10--
+-- 12===============================================================================12 --
 
--- 11===============================================================================11--
---                       EXTRACT SQL FOR DIVISION CENTER DIMENSION                    --
+-- 13===============================================================================13--
+--              EXTRACT SQL FOR POPULATE THE Sales Delivery FACTS                     --
+-- 
+CREATE OR REPLACE VIEW ERPI.SALES_DELIVERY_FS
+AS 
+SELECT 
+    CASE WHEN trim(sd.name) = '' THEN 'Unspecified'
+	ELSE COALESCE(trim(sd.name), 'Unspecified') END            as "ID_DOCUMENT_NK",
+    CASE WHEN trim(sd_item.name) = '' THEN 'Unspecified'
+        ELSE COALESCE(trim(sd_item.name), 'Unspecified') END       as "ID_TRANS_DOC_NK",
+    trim(sd_item.name)                                            as "LINE_NK",
+    DATE_FORMAT(sd.lr_date,'%m/%d/%Y')                             as "ISSUE_DATE",
+--
+--  We can't allow null or nonsense promose dates.  
+--  An no earlier dates as they may not exist in the dates dimension
+-- 													
+    CASE
+            WHEN so.delivery_date IS NULL THEN DATE_FORMAT(sd.lr_date,'%m/%d/%Y')
+            WHEN so.delivery_date < sd.lr_date THEN DATE_FORMAT(sd.lr_date,'%m/%d/%Y')
+            WHEN DATE_FORMAT(so.delivery_date,'%m/%d/%Y') = '01/01/2100' THEN DATE_FORMAT(sd.lr_date,'%m/%d/%Y')
+            ELSE DATE_FORMAT(so.delivery_date,'%m/%d/%Y')
+    END 						           as "PROMISE_DATE",
+    round(sd_item.base_price_list_rate,2)  			   as sd_baseunitprice,
+    round(sd_item.base_amount, 2) 	                           as "Amount",
+    round(sd_item.amount, 2) 	                                   as "Amount_Local",
+    round(sd_item.qty * sd_item.base_price_list_rate, 2)           as "Amount_List",
+    round(sd_item.qty * sd_item.price_list_rate, 2) 	           as "Amount_List_Local",
+    sd_item.qty						           as "Quantity_Order",					    
+    0								   as "Cost",
+    COALESCE(sd.customer, '0')					   as "Customer",
+    COALESCE(sd.company, '0')	                                   as "Company",
+    COALESCE(sd_item.item_code, '0')			           as "Item",
+    COALESCE(sd.price_list_currency, '0')	    	           as "Local_Currency",
+    '1' 							   as "Division",
+    '1'         						   as "Business_Unit",
+    COALESCE(sd.sales_partner, '0')       	                   as "Account_Rep",
+    '0' 					                   as "Profit_Center",
+    CASE WHEN addr.city = '' THEN '0'
+         ELSE COALESCE(upper(addr.city), '0') 
+    END								   as "Ship_City",
+    CASE WHEN addr.state = '' THEN '0'
+         ELSE COALESCE(upper(addr.state), '0') 
+    END								   as "Ship_Region",
+    CASE WHEN addr.country = '' THEN '0'
+         ELSE COALESCE(upper(addr.country), '0') 
+    END								   as "Ship_Country",
+    CASE WHEN addr.city = '' THEN '0'
+         ELSE COALESCE(upper(addr.city), '0') 
+    END								   as "Bill_City",
+    CASE WHEN addr.state = '' THEN '0'
+         ELSE COALESCE(upper(addr.state), '0') 
+    END								   as "Bill_Region",
+    CASE WHEN addr.country = '' THEN '0'
+         ELSE COALESCE(upper(addr.country), '0') 
+    END								   as "Bill_Country",
+    case when sd.creation > sd_item.creation then sd.creation
+         else sd_item.creation
+    end                                                            as "creation", 
+    case when sd.modified > sd_item.modified then sd.modified
+         else sd_item.modified
+    end                                                            as "modified"
+from erpnext.`tabDelivery Note` sd 
+     left outer join erpnext.`tabSales Person` pers on sd.sales_partner = pers.name
+	 left outer join erpnext.`tabAddress` addr on addr.name = sd.customer_address
+     inner join erpnext.`tabDelivery Note Item` sd_item on sd_item.parent = sd.name
+     left outer join erpnext.`tabSales Order` so on so.name = sd_item.against_sales_order
+     inner join erpnext.`tabCustomer` cust on sd.customer = cust.name
+     inner join erpnext.`tabWarehouse` wrhs on wrhs.name = sd_item.warehouse
+     inner join erpnext.`tabItem` itm on itm.item_code = sd_item.item_code
+where  1=1
+ ;
+ 
+-- --------------------------------------------------------
 
-CREATE OR REPLACE VIEW ERPI.DATE_DATA_DS AS
-SELECT DISTINCT 'CL' DATE_PATTERN,
-       date_format(v.selected_date,'%Y%m%d') DAYS_DATE,
-       v.selected_date THE_DATE,
-       year(v.selected_date) YEAR,
-       quarter(v.selected_date) QUARTER,
-       month(v.selected_date) PERIOD,
-       week(v.selected_date) WEEK,
-       dayofyear(v.selected_date) DAY,
-       fy.creation as "creation",
-       fy.modified as "modified"
-FROM 
-ERPI.FISCAL_PERIODS_DS_2 v,
-erpnext.`tabFiscal Year` fy
-WHERE v.selected_date BETWEEN fy.year_start_date AND fy.year_end_date
-ORDER BY 1, 2, 3;
+INSERT INTO ERPI.SALES_DELIVERY_FACTS
+SELECT 
+FS.ID_Document_NK,
+FS.ID_Trans_Doc_NK,
+FS.Line_NK,
+coalesce(IDT.DAYS_DATE,0) as ISSUE_DATE_K,
+coalesce(PDT.DAYS_DATE,0) as PROMISE_DATE_K,
+FS.AMOUNT,
+FS.AMOUNT_LOCAL,
+FS.AMOUNT_LIST,
+FS.AMOUNT_LIST_LOCAL,
+FS.QUANTITY_ORDER,
+FS.COST,
+coalesce(CO.COMPANY_K, 0) as COMPANY_K,
+coalesce(CUS.CUSTOMER_K, 0) as CUSTOMER_K,
+coalesce(PR.PRODUCT_K, 0) as ITEM_K,          -- ITEM
+coalesce(DI.DIVISION_K, 0) as DIVISION_K,      -- DIVISION
+coalesce(BU.BUSINESS_UNIT_K, 0) as BUSINESS_UNIT_K, -- BUSINESS_UNIT
+coalesce(PC.PROFIT_CENTER_K, 0) as PROFIT_CENTER_K, -- PROFIT_CENTER
+coalesce(AR.ACCOUNT_REP_K, 0) as ACCOUNT_REP_K,   -- ACCOUNT_REP
+coalesce(BC.GEO_DATA_K, 0) AS BILL_CITY_K,     -- BILL_CITY
+coalesce(SC.GEO_DATA_K, 0) AS SHIP_CITY_K,     -- SHIP_CITY
+coalesce(LC.LOCAL_CURRENCY_K, 0) as LOCAL_CURRENCY_K -- LOCAL_CURRENCY
+FROM ERPI.SALES_DELIVERY_FS FS
+     LEFT OUTER JOIN ERPI.DATE_DATA_CL IDT on IDT.THE_DATE = STR_TO_DATE(FS.ISSUE_DATE,'%m/%d/%Y')
+     LEFT OUTER JOIN ERPI.DATE_DATA_CL PDT on PDT.THE_DATE = STR_TO_DATE(FS.PROMISE_DATE,'%m/%d/%Y')
+     LEFT OUTER JOIN ERPI.COMPANY CO ON CO.COMPANY_NK = FS.COMPANY
+     LEFT OUTER JOIN ERPI.CUSTOMER CUS ON CUS.CUSTOMER_NK = FS.CUSTOMER
+     LEFT OUTER JOIN ERPI.PRODUCT PR on PR.PRODUCT_NK = FS.ITEM
+     LEFT OUTER JOIN ERPI.DIVISION DI on DI.DIVISION_CODE = FS.DIVISION
+     LEFT OUTER JOIN ERPI.BUSINESS_UNIT BU on BU.BUSINESS_UNIT_NK = FS.BUSINESS_UNIT
+     LEFT OUTER JOIN ERPI.PROFIT_CENTER PC on PC.PROFIT_CENTER_NK = FS.PROFIT_CENTER
+     LEFT OUTER JOIN ERPI.ACCOUNT_REP AR on AR.ACCOUNT_REP_NO = FS.ACCOUNT_REP
+     LEFT OUTER JOIN ERPI.GEO_CITIES_DATA BC on BC.CITY_NAME = FS.BILL_CITY
+     LEFT OUTER JOIN ERPI.GEO_CITIES_DATA SC on SC.CITY_NAME = FS.SHIP_CITY
+     LEFT OUTER JOIN ERPI.LOCAL_CURRENCY LC on LC.LOCAL_CURRENCY_NK = FS.LOCAL_CURRENCY
+WHERE FS.modified >= '1900-01-01';
 
--- -----------------------------------------
+-- ---------------------------------------------------------
+-- 13===============================================================================13 --
 
-INSERT INTO ERPI.DATE_DATA
-select DATE_PATTERN, 
-       DAYS_DATE,
-       THE_DATE,
-       YEAR,
-       QUARTER,
-       PERIOD,
-       WEEK,
-       DAY
-from ERPI.DATE_DATA_DS ds
-WHERE ds.modified >= '1900-01-01';
-
--- -----------------------------------------
-
--- 11===============================================================================11--
-
--- 12===============================================================================12--
---                       EXTRACT SQL FOR DIVISION CITIES DIMENSION                    --
-
-
--- -----------------------------------------
-
-INSERT INTO ERPI.GEO_CITIES_DATA
-select 0 AS GEO_DATA_K, 
-       'NA' as COUNTRY_CODE,
-       'Unknown' AS COUNTRY_NAME,
-       'Unknown' AS REGION_CODE,
-       'Unspecified' AS CITY_NAME,
-       'Unspecified' AS CITY_ACCENT_NAME,
-       '0' AS LATTITUDE,
-       '0' AS LONGITUDE,
-       TIMESTAMP('1971-01-01 00:00:01') AS DATE_FROM,
-       TIMESTAMP('2037-12-31 23:59:59') AS DATE_TOE,
-       1 AS VERSION;
--- -----------------------------------------
-
--- 12===============================================================================12--
+/******************************************************************
+ Populate aggregate table
+******************************************************************/ 
+INSERT INTO ERPI.AGG_NOITEM_SALES_ORDER_FACTS (
+    ORDERDATE_YEAR,
+    ORDERDATE_PERIOD,
+    PROMISEDATE_YEAR,
+    PROMISEDATE_PERIOD,
+    COMPANY_K,
+    CUSTOMER_K,
+    DIVISION_K,
+    BUSINESS_UNIT_K,
+    PROFIT_CENTER_K,
+    ACCOUNT_REP_K,
+    BILL_CITY_K,
+    SHIP_CITY_K,
+    LOCAL_CURRENCY_K,
+    AMOUNT,
+    AMOUNT_LOCAL,
+    AMOUNT_LIST,
+    AMOUNT_LIST_LOCAL,
+    QUANTITY_ORDER,
+    ID_DOCUMENT_NK,
+    COST,
+    DAYS_ORDER_DATE,
+    DAYS_PROMISE_DATE,
+    FACT_COUNT
+    )
+select
+    ISSUE_DATE.YEAR as ORDERDATE_YEAR,
+    ISSUE_DATE.PERIOD as ORDERDATE_PERIOD,
+    PROMISE_DATE.YEAR as PROMISEDATE_YEAR,
+    PROMISE_DATE.PERIOD as PROMISEDATE_PERIOD,
+    COMPANY_K,
+    CUSTOMER_K,
+    DIVISION_K,
+    BUSINESS_UNIT_K,
+    PROFIT_CENTER_K,
+    ACCOUNT_REP_K,
+    BILL_CITY_K,
+    SHIP_CITY_K,
+    LOCAL_CURRENCY_K,
+    sum(SALES_ORDER_FACTS.AMOUNT) as AMOUNT,
+    sum(SALES_ORDER_FACTS.AMOUNT_LOCAL) as AMOUNT_LOCAL,
+    sum(SALES_ORDER_FACTS.AMOUNT_LIST) as AMOUNT_LIST,
+    sum(SALES_ORDER_FACTS.AMOUNT_LIST_LOCAL) as AMOUNT_LIST_LOCAL,
+    sum(SALES_ORDER_FACTS.QUANTITY_ORDER) as QUANTITY_ORDER,
+    count(distinct SALES_ORDER_FACTS.ID_DOCUMENT_NK) as ID_DOCUMENT_NK,
+    sum(SALES_ORDER_FACTS.COST) as COST,
+    min(SALES_ORDER_FACTS.ISSUE_DATE_K) as DAYS_ORDER_DATE,
+    max(SALES_ORDER_FACTS.PROMISE_DATE_K) as DAYS_PROMISE_DATE,   
+    count(*) as FACT_COUNT
+from
+    ERPI.SALES_ORDER_FACTS as SALES_ORDER_FACTS,
+    ERPI.DATE_DATA_CL as ISSUE_DATE,
+    ERPI.DATE_DATA_CL as PROMISE_DATE
+where
+    SALES_ORDER_FACTS.ISSUE_DATE_K = ISSUE_DATE.DAYS_DATE
+and
+    SALES_ORDER_FACTS.PROMISE_DATE_K = PROMISE_DATE.DAYS_DATE
+group by
+    ISSUE_DATE.YEAR,
+    ISSUE_DATE.PERIOD,
+    PROMISE_DATE.YEAR,
+    PROMISE_DATE.PERIOD,
+    COMPANY_K,
+    CUSTOMER_K,
+    DIVISION_K,
+    BUSINESS_UNIT_K,
+    PROFIT_CENTER_K,
+    ACCOUNT_REP_K,
+    BILL_CITY_K,
+    SHIP_CITY_K,
+    LOCAL_CURRENCY_K;
+/******************************************************************
+ Populate aggregate table
+******************************************************************/ 
+INSERT INTO ERPI.AGG_NOCUST_SALES_ORDER_FACTS (
+    ORDERDATE_YEAR,
+    ORDERDATE_PERIOD,
+    PROMISEDATE_YEAR,
+    PROMISEDATE_PERIOD,
+    COMPANY_K,
+    ITEM_K,
+    DIVISION_K,
+    BUSINESS_UNIT_K,
+    PROFIT_CENTER_K,
+    ACCOUNT_REP_K,
+    LOCAL_CURRENCY_K,
+    AMOUNT,
+    AMOUNT_LOCAL,
+    AMOUNT_LIST,
+    AMOUNT_LIST_LOCAL,
+    QUANTITY_ORDER,
+    ID_DOCUMENT_NK,
+    COST,
+    DAYS_ORDER_DATE,
+    DAYS_PROMISE_DATE,
+    FACT_COUNT
+    )
+select
+    ISSUE_DATE.YEAR as ORDERDATE_YEAR,
+    ISSUE_DATE.PERIOD as ORDERDATE_PERIOD,
+    PROMISE_DATE.YEAR as PROMISEDATE_YEAR,
+    PROMISE_DATE.PERIOD as PROMISEDATE_PERIOD,
+    COMPANY_K,
+    ITEM_K,
+    DIVISION_K,
+    BUSINESS_UNIT_K,
+    PROFIT_CENTER_K,
+    ACCOUNT_REP_K,
+    LOCAL_CURRENCY_K,
+    sum(SALES_ORDER_FACTS.AMOUNT) as AMOUNT,
+    sum(SALES_ORDER_FACTS.AMOUNT_LOCAL) as AMOUNT_LOCAL,
+    sum(SALES_ORDER_FACTS.AMOUNT_LIST) as AMOUNT_LIST,
+    sum(SALES_ORDER_FACTS.AMOUNT_LIST_LOCAL) as AMOUNT_LIST_LOCAL,
+    sum(SALES_ORDER_FACTS.QUANTITY_ORDER) as QUANTITY_ORDER,
+    count(distinct SALES_ORDER_FACTS.ID_DOCUMENT_NK) as ID_DOCUMENT_NK,
+    sum(SALES_ORDER_FACTS.COST) as COST,
+    min(SALES_ORDER_FACTS.ISSUE_DATE_K) as DAYS_ORDER_DATE,
+    max(SALES_ORDER_FACTS.PROMISE_DATE_K) as DAYS_PROMISE_DATE,   
+    count(*) as FACT_COUNT
+from
+    ERPI.SALES_ORDER_FACTS as SALES_ORDER_FACTS,
+    ERPI.DATE_DATA_CL as ISSUE_DATE,
+    ERPI.DATE_DATA_CL as PROMISE_DATE
+where
+    SALES_ORDER_FACTS.ISSUE_DATE_K = ISSUE_DATE.DAYS_DATE
+and
+    SALES_ORDER_FACTS.PROMISE_DATE_K = PROMISE_DATE.DAYS_DATE
+group by
+    ISSUE_DATE.YEAR,
+    ISSUE_DATE.PERIOD,
+    PROMISE_DATE.YEAR,
+    PROMISE_DATE.PERIOD,
+    COMPANY_K,
+    ITEM_K,
+    DIVISION_K,
+    BUSINESS_UNIT_K,
+    PROFIT_CENTER_K,
+    ACCOUNT_REP_K,
+    LOCAL_CURRENCY_K;
+/******************************************************************
+ Populate aggregate table
+******************************************************************/  
+INSERT INTO ERPI.AGG_NOITEM_SALES_DELIVERY_FACTS (
+    DELIVERYDATE_YEAR,
+    DELIVERYDATE_PERIOD,
+    PROMISEDATE_YEAR,
+    PROMISEDATE_PERIOD,
+    COMPANY_K,
+    CUSTOMER_K,
+    DIVISION_K,
+    BUSINESS_UNIT_K,
+    PROFIT_CENTER_K,
+    ACCOUNT_REP_K,
+    BILL_CITY_K,
+    SHIP_CITY_K,
+    LOCAL_CURRENCY_K,
+    AMOUNT,
+    AMOUNT_LOCAL,
+    AMOUNT_LIST,
+    AMOUNT_LIST_LOCAL,
+    QUANTITY_ORDER,
+    ID_DOCUMENT_NK,
+    ID_TRANS_DOC_NK,
+    COST,
+    DAYS_DELIVERY_DATE,
+    DAYS_PROMISE_DATE,
+    FACT_COUNT
+    )
+select
+    ISSUE_DATE.YEAR as DELIVERYDATE_YEAR,
+    ISSUE_DATE.PERIOD as DELIVERYDATE_PERIOD,
+    PROMISE_DATE.YEAR as PROMISEDATE_YEAR,
+    PROMISE_DATE.PERIOD as PROMISEDATE_PERIOD,
+    COMPANY_K,
+    CUSTOMER_K,
+    DIVISION_K,
+    BUSINESS_UNIT_K,
+    PROFIT_CENTER_K,
+    ACCOUNT_REP_K,
+    BILL_CITY_K,
+    SHIP_CITY_K,
+    LOCAL_CURRENCY_K,
+    sum(SALES_DELIVERY_FACTS.AMOUNT) as AMOUNT,
+    sum(SALES_DELIVERY_FACTS.AMOUNT_LOCAL) as AMOUNT_LOCAL,
+    sum(SALES_DELIVERY_FACTS.AMOUNT_LIST) as AMOUNT_LIST,
+    sum(SALES_DELIVERY_FACTS.AMOUNT_LIST_LOCAL) as AMOUNT_LIST_LOCAL,
+    sum(SALES_DELIVERY_FACTS.QUANTITY_ORDER) as QUANTITY_ORDER,
+    count(distinct SALES_DELIVERY_FACTS.ID_DOCUMENT_NK) as ID_DOCUMENT_NK,
+    count(distinct SALES_DELIVERY_FACTS.ID_TRANS_DOC_NK) as ID_TRANS_DOC_NK,
+    sum(SALES_DELIVERY_FACTS.COST) as COST,
+    min(SALES_DELIVERY_FACTS.ISSUE_DATE_K) as DAYS_DELIVERY_DATE,
+    max(SALES_DELIVERY_FACTS.PROMISE_DATE_K) as DAYS_PROMISE_DATE,   
+    count(*) as FACT_COUNT
+from
+    ERPI.SALES_DELIVERY_FACTS as SALES_DELIVERY_FACTS,
+    ERPI.DATE_DATA_CL as ISSUE_DATE,
+    ERPI.DATE_DATA_CL as PROMISE_DATE
+where
+    SALES_DELIVERY_FACTS.ISSUE_DATE_K = ISSUE_DATE.DAYS_DATE
+and
+    SALES_DELIVERY_FACTS.PROMISE_DATE_K = PROMISE_DATE.DAYS_DATE
+group by
+    ISSUE_DATE.YEAR,
+    ISSUE_DATE.PERIOD,
+    PROMISE_DATE.YEAR,
+    PROMISE_DATE.PERIOD,
+    COMPANY_K,
+    CUSTOMER_K,
+    DIVISION_K,
+    BUSINESS_UNIT_K,
+    PROFIT_CENTER_K,
+    ACCOUNT_REP_K,
+    BILL_CITY_K,
+    SHIP_CITY_K,
+    LOCAL_CURRENCY_K;
+/******************************************************************
+ Populate aggregate table
+******************************************************************/  
+INSERT INTO ERPI.AGG_NOCUST_SALES_DELIVERY_FACTS (
+    DELIVERYDATE_YEAR,
+    DELIVERYDATE_PERIOD,
+    PROMISEDATE_YEAR,
+    PROMISEDATE_PERIOD,
+    COMPANY_K,
+    ITEM_K,
+    DIVISION_K,
+    BUSINESS_UNIT_K,
+    PROFIT_CENTER_K,
+    ACCOUNT_REP_K,
+    LOCAL_CURRENCY_K,
+    AMOUNT,
+    AMOUNT_LOCAL,
+    AMOUNT_LIST,
+    AMOUNT_LIST_LOCAL,
+    QUANTITY_ORDER,
+    ID_DOCUMENT_NK,
+    ID_TRANS_DOC_NK,
+    COST,
+    DAYS_DELIVERY_DATE,
+    DAYS_PROMISE_DATE,
+    FACT_COUNT
+    )
+select
+    ISSUE_DATE.YEAR as DELIVERYDATE_YEAR,
+    ISSUE_DATE.PERIOD as DELIVERYDATE_PERIOD,
+    PROMISE_DATE.YEAR as PROMISEDATE_YEAR,
+    PROMISE_DATE.PERIOD as PROMISEDATE_PERIOD,
+    COMPANY_K,
+    ITEM_K,
+    DIVISION_K,
+    BUSINESS_UNIT_K,
+    PROFIT_CENTER_K,
+    ACCOUNT_REP_K,
+    LOCAL_CURRENCY_K,
+    sum(SALES_DELIVERY_FACTS.AMOUNT) as AMOUNT,
+    sum(SALES_DELIVERY_FACTS.AMOUNT_LOCAL) as AMOUNT_LOCAL,
+    sum(SALES_DELIVERY_FACTS.AMOUNT_LIST) as AMOUNT_LIST,
+    sum(SALES_DELIVERY_FACTS.AMOUNT_LIST_LOCAL) as AMOUNT_LIST_LOCAL,
+    sum(SALES_DELIVERY_FACTS.QUANTITY_ORDER) as QUANTITY_ORDER,
+    count(distinct SALES_DELIVERY_FACTS.ID_DOCUMENT_NK) as ID_DOCUMENT_NK,
+    count(distinct SALES_DELIVERY_FACTS.ID_TRANS_DOC_NK) as ID_TRANS_DOC_NK,
+    sum(SALES_DELIVERY_FACTS.COST) as COST,
+    min(SALES_DELIVERY_FACTS.ISSUE_DATE_K) as DAYS_DELIVERY_DATE,
+    max(SALES_DELIVERY_FACTS.PROMISE_DATE_K) as DAYS_PROMISE_DATE,   
+    count(*) as FACT_COUNT
+from
+    ERPI.SALES_DELIVERY_FACTS as SALES_DELIVERY_FACTS,
+    ERPI.DATE_DATA_CL as ISSUE_DATE,
+    ERPI.DATE_DATA_CL as PROMISE_DATE
+where
+    SALES_DELIVERY_FACTS.ISSUE_DATE_K = ISSUE_DATE.DAYS_DATE
+and
+    SALES_DELIVERY_FACTS.PROMISE_DATE_K = PROMISE_DATE.DAYS_DATE
+group by
+    ISSUE_DATE.YEAR,
+    ISSUE_DATE.PERIOD,
+    PROMISE_DATE.YEAR,
+    PROMISE_DATE.PERIOD,
+    COMPANY_K,
+    ITEM_K,
+    DIVISION_K,
+    BUSINESS_UNIT_K,
+    PROFIT_CENTER_K,
+    ACCOUNT_REP_K,
+    LOCAL_CURRENCY_K;
