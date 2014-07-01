@@ -1,3 +1,11 @@
+-- ------------------------------------------------------------
+--	Copyright 2012 Jeff Gunderson                         -
+--	Licensed under the GNU Public License, Version 3.0    -
+--                                                            -
+--	Copyright 2014 LogicB Labs LLC                        -
+--	Licensed under the GNU Public License, Version 3.0    -
+-- ------------------------------------------------------------
+
 -- Drop and Re-Create Schema
    
    DROP schema IF exists ERPI;
